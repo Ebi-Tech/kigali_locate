@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Implementation Reflection — Kigali Locate</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Georgia', serif;
+      font-size: 12pt;
+      line-height: 1.8;
+      color: #1a1a1a;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 60px 40px;
+    }
+    h1 {
+      font-size: 20pt;
+      margin-bottom: 4px;
+      color: #111;
+    }
+    .subtitle {
+      font-size: 11pt;
+      color: #555;
+      margin-bottom: 40px;
+      font-style: italic;
+    }
+    h2 {
+      font-size: 14pt;
+      margin-top: 36px;
+      margin-bottom: 10px;
+      color: #111;
+    }
+    h3 {
+      font-size: 12pt;
+      margin-top: 24px;
+      margin-bottom: 8px;
+      color: #222;
+    }
+    p {
+      margin-bottom: 12px;
+    }
+    pre {
+      background: #f4f4f4;
+      border-left: 3px solid #aaa;
+      padding: 14px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 9.5pt;
+      line-height: 1.6;
+      overflow-x: auto;
+      margin: 12px 0 16px 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .screenshot-block {
+      margin: 16px 0;
+      text-align: center;
+    }
+    .screenshot-block img {
+      max-width: 100%;
+      max-height: 420px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      object-fit: contain;
+    }
+    .caption {
+      font-size: 10pt;
+      color: #666;
+      margin-top: 6px;
+      font-style: italic;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 11pt;
+    }
+    th {
+      background: #f0f0f0;
+      padding: 10px 12px;
+      text-align: left;
+      border: 1px solid #ccc;
+      font-weight: bold;
+    }
+    td {
+      padding: 9px 12px;
+      border: 1px solid #ddd;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    .label {
+      display: inline-block;
+      background: #e8e8e8;
+      border-radius: 4px;
+      padding: 1px 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 10pt;
+      color: #333;
+    }
+    @media print {
+      body { padding: 40px 30px; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Implementation Reflection</h1>
+  <p class="subtitle">Individual Assignment 2</p>
+
+  <p style="margin-bottom: 4px;">
+    <strong>GitHub:</strong>&nbsp;
+    <a href="https://github.com/Ebi-Tech/kigali_locate" style="color:#1a56db;">
+      https://github.com/Ebi-Tech/kigali_locate
+    </a>
+  </p>
+  <p style="margin-bottom: 32px;">
+    <strong>Demo Video:</strong>&nbsp;
+    <a href="https://youtu.be/lZVCudjab7o" style="color:#1a56db;">
+      https://youtu.be/lZVCudjab7o
+    </a>
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    Integrating Firebase into a Flutter application introduced backend complexity that went well beyond typical
+    frontend development. This reflection covers three key challenges encountered during authentication and
+    Firestore integration, the symptoms observed in each case, and how each was diagnosed and resolved.
+  </p>
+
+  <h2>Map Library Decision: OpenStreetMap over Google Maps</h2>
+  <p>
+    The assignment specifies an embedded Google Map for the detail and map view screens. During development,
+    integrating the <span class="label">google_maps_flutter</span> package was evaluated but not pursued for
+    the following reasons:
+  </p>
+  <p>
+    Google Maps Platform requires a billing account to be activated on Google Cloud Console — a credit or
+    debit card must be on file — before an API key can be used, even within the free monthly usage tier.
+    For the scope of this academic project, enabling billing on a personal account purely to satisfy a
+    library requirement was not a justifiable risk.
+  </p>
+  <p>
+    Instead, <span class="label">flutter_map</span> with OpenStreetMap tiles was used. This library is
+    fully open-source, requires no API key, no billing account, and no registration of any kind. It renders
+    tile-based maps identically to Google Maps in terms of the core requirement: displaying a map,
+    placing coordinate-based markers from Firestore data, and supporting tap interactions. The navigation
+    feature still launches <strong>Google Maps</strong> for turn-by-turn directions via the
+    <span class="label">url_launcher</span> package — so the Google Maps integration is present where it
+    matters most to the user. The embedded map view uses OpenStreetMap solely as a free, friction-free
+    alternative that fulfils the same functional requirement without introducing account or billing barriers.
+  </p>
+
+  <h2>Challenge 1: Firestore Security Rules Blocking All Data Access</h2>
+
+  <h3>What happened</h3>
+  <p>
+    After wiring up the Firestore listings streams, every screen that loaded data — Directory, My Listings,
+    and Map View — either froze on a loading spinner or displayed a "Failed to load" error. The My Listings
+    screen showed the error below.
+  </p>
+
+  <div class="screenshot-block">
+    <img src="screenshot1.png" alt="Firestore permission-denied error on My Listings screen" />
+    <p class="caption">Figure 1 — <span class="label">[cloud_firestore/permission-denied]</span> error displayed on the My Listings screen</p>
+  </div>
+
+  <p>
+    The error <em>[cloud_firestore/permission-denied] The caller does not have permission to execute the
+    specified operation</em> was thrown by every Firestore read and write attempt. The root cause was that
+    Cloud Firestore is created with locked-down default rules that deny all access until explicitly configured.
+  </p>
+
+  <h3>How it was resolved</h3>
+  <p>
+    The Firestore security rules were updated in the Firebase Console to permit public reads on listings and
+    reviews, and authenticated writes scoped to the user's own data:
+  </p>
+
+  <pre>rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /listings/{listingId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         &amp;&amp; request.auth.uid == userId;
+    }
+  }
+}</pre>
+
+  <p>Publishing these rules immediately resolved all data access errors across every screen.</p>
+
+  <h2>Challenge 2: Composite Index Required for User Listings Query</h2>
+
+  <h3>What happened</h3>
+  <p>
+    The My Listings screen queries Firestore for listings belonging to the current user, sorted by creation
+    date. At runtime this query failed with the error shown below.
+  </p>
+
+  <div class="screenshot-block">
+    <img src="screenshot2.png" alt="Firestore failed-precondition composite index error" />
+    <p class="caption">Figure 2 — <span class="label">[cloud_firestore/failed-precondition]</span> error requiring a composite index</p>
+  </div>
+
+  <p>
+    Firestore requires a composite index whenever a query combines a <span class="label">where()</span> filter
+    on one field with an <span class="label">orderBy()</span> on a different field. This requirement is not
+    enforced at compile time and only surfaces at runtime, making it a non-obvious integration constraint.
+  </p>
+
+  <h3>How it was resolved</h3>
+  <p>
+    Rather than creating a composite index in the Firebase Console, the <span class="label">orderBy</span>
+    clause was removed from the Firestore query and the sorting was moved to the client side in Dart:
+  </p>
+
+  <pre>Stream&lt;List&lt;ListingModel&gt;&gt; getUserListingsStream(String uid) {
+  return _firestore
+      .collection('listings')
+      .where('createdBy', isEqualTo: uid)
+      .snapshots()
+      .map((snapshot) {
+        final listings = snapshot.docs
+            .map((doc) => ListingModel.fromFirestore(doc))
+            .toList();
+        listings.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return listings;
+      });
+}</pre>
+
+  <p>
+    This eliminated the composite index requirement while preserving identical sort behaviour, and the
+    My Listings screen loaded correctly afterwards.
+  </p>
+
+  <h2>Challenge 3: Authentication Flow Broken by Firestore Exception</h2>
+
+  <h3>What happened</h3>
+  <p>
+    During signup, Firebase Authentication successfully created the account and sent the verification email,
+    but the app showed an error snackbar instead of navigating to the verify email screen. The account
+    existed in Firebase Auth, yet the user remained stuck on the signup form.
+  </p>
+
+  <h3>Root cause</h3>
+  <p>
+    The <span class="label">signUp()</span> method in <span class="label">AuthService</span> wrote the user
+    profile to Firestore immediately after creating the account. Because Firestore rules were not yet
+    configured at this stage, the write threw a <span class="label">PERMISSION_DENIED</span> exception.
+    Since the Firestore write was not wrapped in its own error handler, the exception propagated up through
+    <span class="label">AuthNotifier</span>, causing it to return <span class="label">false</span> and
+    display an error — even though Firebase Auth had already succeeded.
+  </p>
+
+  <pre>// Before fix — Firestore exception propagated and broke the auth flow
+final credential = await _auth.createUserWithEmailAndPassword(...);
+await credential.user?.sendEmailVerification();
+await _firestoreService.createUserProfile(profile); // threw PERMISSION_DENIED
+return credential; // never reached</pre>
+
+  <h3>How it was resolved</h3>
+  <p>
+    The Firestore profile creation was isolated in its own <span class="label">try/catch</span> block,
+    making it non-blocking. Authentication success no longer depends on whether the Firestore write succeeds:
+  </p>
+
+  <pre>// After fix — Firestore failure is isolated, auth flow always completes
+await credential.user?.sendEmailVerification();
+try {
+  await _firestoreService.createUserProfile(profile);
+} catch (e) {
+  debugPrint('Warning: Failed to create Firestore user profile: $e');
+}
+return credential; // always reached on successful auth</pre>
+
+  <p>
+    After this change, the user was correctly routed to the <span class="label">VerifyEmailScreen</span>
+    on every signup, regardless of the state of Firestore security rules.
+  </p>
+
+  <h2>Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Challenge</th>
+        <th>Area</th>
+        <th>Resolution</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Security rules denying all reads and writes</td>
+        <td>Firestore</td>
+        <td>Updated rules to allow authenticated reads/writes per collection</td>
+      </tr>
+      <tr>
+        <td>Composite index required at runtime</td>
+        <td>Firestore</td>
+        <td>Removed <span class="label">orderBy</span> from query; sorted client-side in Dart</td>
+      </tr>
+      <tr>
+        <td>Firestore exception breaking the signup auth flow</td>
+        <td>Authentication</td>
+        <td>Isolated profile write in a separate <span class="label">try/catch</span> block</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Links</h2>
+  <p><strong>GitHub Repository:</strong>&nbsp;
+    <a href="https://github.com/Ebi-Tech/kigali_locate" style="color:#1a56db;">
+      https://github.com/Ebi-Tech/kigali_locate
+    </a>
+  </p>
+  <p><strong>Demo Video:</strong>&nbsp;
+    <a href="https://youtu.be/lZVCudjab7o" style="color:#1a56db;">
+      https://youtu.be/lZVCudjab7o
+    </a>
+  </p>
+
+</body>
+</html>
